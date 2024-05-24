@@ -1,26 +1,22 @@
 import React, { useState, useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
+import { FaChevronDown, FaChevronUp } from 'react-icons/fa';
 import './App.css';
 
 const BudgetApp = () => {
-  const [budget, setBudget] = useState('');
+  const [budgetName, setBudgetName] = useState('');
   const [selectedCurrency, setSelectedCurrency] = useState('USD');
   const [categories, setCategories] = useState([]);
   const [newCategoryName, setNewCategoryName] = useState('');
-  const [newCategoryAmount, setNewCategoryAmount] = useState('');
   const [newSubcategoryName, setNewSubcategoryName] = useState('');
   const [newSubcategoryAmount, setNewSubcategoryAmount] = useState('');
+  const [expandedCategories, setExpandedCategories] = useState({});
 
   const componentRef = useRef();
 
   const handlePrint = useReactToPrint({
     content: () => componentRef.current,
   });
-
-  const handleBudgetChange = (event) => {
-    const value = event.target.value;
-    setBudget(value);
-  };
 
   const handleCategoryAmountChange = (categoryIndex, event) => {
     const updatedCategories = [...categories];
@@ -38,18 +34,27 @@ const BudgetApp = () => {
     setSelectedCurrency(event.target.value);
   };
 
+  const handlePaidChange = (categoryIndex, subIndex = null) => {
+    const updatedCategories = [...categories];
+    if (subIndex === null) {
+      updatedCategories[categoryIndex].paid = !updatedCategories[categoryIndex].paid;
+    } else {
+      updatedCategories[categoryIndex].subcategories[subIndex].paid = !updatedCategories[categoryIndex].subcategories[subIndex].paid;
+    }
+    setCategories(updatedCategories);
+  };
+
   const addCategory = () => {
-    if (newCategoryName.trim() !== '' && newCategoryAmount.trim() !== '') {
+    if (newCategoryName.trim() !== '') {
       setCategories([
         ...categories,
         {
           name: newCategoryName,
-          amount: newCategoryAmount,
+          paid: false,
           subcategories: [],
         },
       ]);
       setNewCategoryName('');
-      setNewCategoryAmount('');
     }
   };
 
@@ -59,6 +64,7 @@ const BudgetApp = () => {
       updatedCategories[categoryIndex].subcategories.push({
         name: newSubcategoryName,
         amount: newSubcategoryAmount,
+        paid: false,
       });
       setCategories(updatedCategories);
       setNewSubcategoryName('');
@@ -78,82 +84,123 @@ const BudgetApp = () => {
     setCategories(updatedCategories);
   };
 
+  const toggleCategory = (index) => {
+    setExpandedCategories((prev) => ({
+      ...prev,
+      [index]: !prev[index],
+    }));
+  };
+
+  const calculateTotal = () => {
+    let totalBudget = 0;
+    const categoryTotals = categories.map((category) => {
+      let categoryTotal = category.subcategories.reduce((acc, subcategory) => {
+        return acc + (parseFloat(subcategory.amount) || 0);
+      }, 0);
+      totalBudget += categoryTotal;
+      return categoryTotal;
+    });
+    return { totalBudget, categoryTotals };
+  };
+
   return (
     <div className="budget-app">
       <div ref={componentRef}>
         <h1>My Budget App</h1>
-        <label htmlFor="budgetInput">Set Budget:</label>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <input
-            type="text"
-            id="budgetInput"
-            value={budget}
-            onChange={handleBudgetChange}
-            placeholder="Enter budget amount"
-          />
-          <select onChange={handleCurrencyChange} value={selectedCurrency}>
-            {['USD', 'GBP', 'EUR', 'ZAR'].map((currency) => (
-              <option key={currency} value={currency}>
-                {currency}
-              </option>
-            ))}
-          </select>
-        </div>
+        <label htmlFor="budgetNameInput">Budget Name:</label>
+        <input
+          type="text"
+          id="budgetNameInput"
+          value={budgetName}
+          onChange={(e) => setBudgetName(e.target.value)}
+          placeholder="Enter budget name"
+        />
+        <label htmlFor="currencySelect">Currency:</label>
+        <select id="currencySelect" onChange={handleCurrencyChange} value={selectedCurrency}>
+          {['USD', 'GBP', 'EUR', 'ZAR'].map((currency) => (
+            <option key={currency} value={currency}>
+              {currency}
+            </option>
+          ))}
+        </select>
 
         <div className="categories">
           <h2>Categories</h2>
-          <div style={{ display: 'flex' }}>
+          <div>
             {categories.map((category, index) => (
               <div key={index} className="category-item">
-                <div>
+                <div className="category-header" onClick={() => toggleCategory(index)}>
                   <h3>
                     {category.name}
+                    <span className="toggle-icon">
+                      {expandedCategories[index] ? <FaChevronUp /> : <FaChevronDown />}
+                    </span>
                     <button
                       className="delete-button"
-                      onClick={() => handleDeleteCategory(index)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteCategory(index);
+                      }}
                     >
                       Delete
                     </button>
                   </h3>
-                  <input
-                    type="number"
-                    value={category.amount}
-                    onChange={(e) => handleCategoryAmountChange(index, e)}
-                  />
+                  {expandedCategories[index] && (
+                    <>
+                      <label>
+                        Paid
+                        <input
+                          type="checkbox"
+                          checked={category.paid || false}
+                          onChange={() => handlePaidChange(index)}
+                        />
+                      </label>
+                    </>
+                  )}
                 </div>
-                <div>
-                  {category.subcategories.map((subcategory, subIndex) => (
-                    <div key={subIndex} className="subcategory-item">
-                      <span>{subcategory.name}</span>
+                {expandedCategories[index] && (
+                  <>
+                    {category.subcategories.map((subcategory, subIndex) => (
+                      <div key={subIndex} className="subcategory-item">
+                        <span>{subcategory.name}</span>
+                        <input
+                          type="number"
+                          value={subcategory.amount}
+                          onChange={(e) => handleSubcategoryAmountChange(index, subIndex, e)}
+                        />
+                        <label>
+                          Paid
+                          <input
+                            type="checkbox"
+                            checked={subcategory.paid || false}
+                            onChange={() => handlePaidChange(index, subIndex)}
+                          />
+                        </label>
+                        <button
+                          className="delete-button"
+                          onClick={() => handleDeleteSubcategory(index, subIndex)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ))}
+                    <div>
+                      <input
+                        type="text"
+                        value={newSubcategoryName}
+                        onChange={(e) => setNewSubcategoryName(e.target.value)}
+                        placeholder="Enter subcategory name"
+                      />
                       <input
                         type="number"
-                        value={subcategory.amount}
-                        onChange={(e) => handleSubcategoryAmountChange(index, subIndex, e)}
+                        value={newSubcategoryAmount}
+                        onChange={(e) => setNewSubcategoryAmount(e.target.value)}
+                        placeholder="Enter subcategory amount"
                       />
-                      <button
-                        className="delete-button"
-                        onClick={() => handleDeleteSubcategory(index, subIndex)}
-                      >
-                        Delete
-                      </button>
+                      <button onClick={() => addSubcategory(index)}>Add Subcategory</button>
                     </div>
-                  ))}
-                  <div>
-                    <input
-                      type="text"
-                      value={newSubcategoryName}
-                      onChange={(e) => setNewSubcategoryName(e.target.value)}
-                      placeholder="Enter subcategory name"
-                    />
-                    <input
-                      type="number"
-                      value={newSubcategoryAmount}
-                      onChange={(e) => setNewSubcategoryAmount(e.target.value)}
-                      placeholder="Enter subcategory amount"
-                    />
-                    <button onClick={() => addSubcategory(index)}>Add Subcategory</button>
-                  </div>
-                </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
@@ -164,21 +211,28 @@ const BudgetApp = () => {
               onChange={(e) => setNewCategoryName(e.target.value)}
               placeholder="Enter category name"
             />
-            <input
-              type="number"
-              value={newCategoryAmount}
-              onChange={(e) => setNewCategoryAmount(e.target.value)}
-              placeholder="Enter category amount"
-            />
             <button onClick={addCategory}>Add Category</button>
           </div>
         </div>
-
-        {/* Remaining JSX content... */}
-      </div>
-      <button onClick={handlePrint}>Download PDF</button>
-    </div>
-  );
+        <div className="total-budget">
+          <h2>Total Budget</h2>
+          <p>Total Budget: {calculateTotal().totalBudget} {selectedCurrency}</p>
+          <div className="category-totals">
+            
+<h3>Category Totals</h3>
+<ul>
+  {categories.map((category, index) => (
+    <li key={index}>
+      {category.name}: {calculateTotal().categoryTotals[index]} {selectedCurrency}
+    </li>
+  ))}
+</ul>
+</div>
+</div>
+</div>
+<button onClick={handlePrint}>Download PDF</button>
+</div>
+);
 };
 
 export default BudgetApp;
